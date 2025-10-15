@@ -1,0 +1,42 @@
+# =========================================================
+# ESP32-S3 Arduino 개발환경 통일용 Dockerfile
+# =========================================================
+FROM arduino/arduino-cli:latest
+
+
+# 컨테이너 기본 작업 디렉토리
+WORKDIR /workspace
+
+# 호스트의 프로젝트 파일들을 컨테이너로 복사
+COPY . /workspace
+
+# ---------------------------------------------------------
+# 1️⃣ 보드 패키지 등록 및 설치
+# ---------------------------------------------------------
+RUN arduino-cli config init && \
+    arduino-cli core update-index && \
+    arduino-cli core install esp32:esp32
+
+# ---------------------------------------------------------
+# 2️⃣ (선택) 자주 쓰는 라이브러리들 미리 설치 — 추후 확장 가능
+# ---------------------------------------------------------
+# RUN arduino-cli lib install "WiFi" "PubSubClient" "ArduinoJson"
+
+# ---------------------------------------------------------
+# 3️⃣ 기본 명령 (빌드)
+#   --fqbn = Fully Qualified Board Name
+#   esp32:esp32:esp32s3 → ESP32-S3용
+# ---------------------------------------------------------
+CMD ["arduino-cli", "compile", "--fqbn", "esp32:esp32:esp32s3", "."]
+
+# =========================================================
+# ⚙️ 사용법
+# ---------------------------------------------------------
+# ① 빌드:
+#     docker build -t esp32s3_env .
+# ② 프로젝트 실행 (빌드):
+#     docker run --rm -v ${PWD}:/workspace esp32s3_env
+# ③ 업로드(USB 포트 연결 시):
+#     docker run --rm --device=/dev/ttyUSB0 -v ${PWD}:/workspace esp32s3_env \
+#        arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32s3 .
+# =========================================================
