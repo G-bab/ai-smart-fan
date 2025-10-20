@@ -27,7 +27,7 @@ def read_serial():
     if not ser:
         return
     while True:
-        try:
+        try: 
             line = ser.readline().decode(errors="ignore").strip()
             if line:
                 received_data = line

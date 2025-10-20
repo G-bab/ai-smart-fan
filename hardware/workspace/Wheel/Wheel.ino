@@ -74,7 +74,7 @@ void handleCommand(String cmd) {
   else if (cmd == "MOVE BACK") {
     setMotor(LEFT_IN1, LEFT_IN2, PWM_CHANNEL_LEFT, 200, -1);
     setMotor(RIGHT_IN1, RIGHT_IN2, PWM_CHANNEL_RIGHT, 200, -1);
-  } 
+  }
   else if (cmd == "MOVE LEFT") {
     setMotor(LEFT_IN1, LEFT_IN2, PWM_CHANNEL_LEFT, 180, -1);
     setMotor(RIGHT_IN1, RIGHT_IN2, PWM_CHANNEL_RIGHT, 180, 1);
