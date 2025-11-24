@@ -2,100 +2,119 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.utils import timezone
-from .models import User, Device, SensorData, FilterStatus
-from .serializer import UserSerializer, DeviceSerializer, SensorDataSerializer, FilterStatusSerializer
+from .models import (
+    Team, User, Device, TeamUser, TeamDevice,
+    SensorData, FilterStatus
+)
+from .serializer import (
+    TeamSerializer, UserSerializer, DeviceSerializer,
+    TeamUserSerializer, TeamDeviceSerializer,
+    SensorDataSerializer, FilterStatusSerializer
+)
 
-# 사용자 CRUD
+
+# ------------------------
+# 기본 CRUD 뷰셋
+# ------------------------
+
+class TeamViewSet(viewsets.ModelViewSet):
+    queryset = Team.objects.all()
+    serializer_class = TeamSerializer
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
-# 선풍기 기기 CRUD + 제어 관련
+
 class DeviceViewSet(viewsets.ModelViewSet):
     queryset = Device.objects.all()
     serializer_class = DeviceSerializer
 
-    # 커스텀 제어 (풍속/전원/각도)
     def partial_update(self, request, *args, **kwargs):
+        """선풍기 수동 제어 (전원, 풍속, 각도 등)"""
         device = self.get_object()
-        fan_speed = request.data.get("fan_speed")
-        power_state = request.data.get("power_state")
-        angle = request.data.get("angle")
-
-        if fan_speed is not None:
-            device.fan_speed = fan_speed
-        if power_state is not None:
-            device.power_state = power_state
-        if angle is not None:
-            device.angle = angle
-
+        for field in ["fan_speed", "power_state", "angle"]:
+            if field in request.data:
+                setattr(device, field, request.data[field])
         device.last_sync = timezone.now()
         device.save()
         return Response(DeviceSerializer(device).data)
 
-# 센서 데이터 저장 (라즈베리파이 → 서버)
+
+class TeamUserViewSet(viewsets.ModelViewSet):
+    queryset = TeamUser.objects.all()
+    serializer_class = TeamUserSerializer
+
+
+class TeamDeviceViewSet(viewsets.ModelViewSet):
+    queryset = TeamDevice.objects.all()
+    serializer_class = TeamDeviceSerializer
+
+
 class SensorDataViewSet(viewsets.ModelViewSet):
     queryset = SensorData.objects.all().order_by('-created_at')
     serializer_class = SensorDataSerializer
 
     def create(self, request, *args, **kwargs):
+        """라즈베리파이 → 서버로 센서 데이터 업로드"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
 
-        # 추가: AI 제어 알고리즘 트리거
         device = serializer.validated_data.get('device')
-        if not device:
-            return Response({"error": "device field is required"}, status=400)
-        temp = serializer.validated_data['temperature']
-        humidity = serializer.validated_data['humidity']
+        if device:
+            temp = serializer.validated_data.get('temperature')
+            # 온도 기반 자동 풍속 제어
+            if temp:
+                if temp > 30:
+                    device.fan_speed = 3
+                elif temp > 25:
+                    device.fan_speed = 2
+                else:
+                    device.fan_speed = 1
+                device.last_sync = timezone.now()
+                device.save()
 
-        # 풍속 자동 조절 로직 (예시)
-        if temp > 30:
-            device.fan_speed = 3
-        elif temp > 25:
-            device.fan_speed = 2
-        else:
-            device.fan_speed = 1
-
-        device.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-# 공기청정 필터 상태
+
 class FilterStatusViewSet(viewsets.ModelViewSet):
-    queryset = FilterStatus.objects.all().order_by('-updated_at')
+    queryset = FilterStatus.objects.all().order_by('-filter_id')
     serializer_class = FilterStatusSerializer
 
-# AI 기반 풍속·회전 제어 API
+
+# ------------------------
+# 추가 제어 기능 (AI / 음성 / 알림)
+# ------------------------
+
 @api_view(['POST'])
 def control_fan(request):
     """
-    사용자의 위치 좌표, 온습도, 음성 명령을 기반으로
-    팬 풍속 및 회전각 자동 조절
+    AI 기반 풍속·회전 제어 (온도, 위치, 음성 명령 포함)
     """
     mode = request.data.get("mode")  # auto / follow / manual
     user_x = request.data.get("user_x")
     temperature = request.data.get("temperature")
-    voice = request.data.get("voice_command")  # ✅ 추가된 부분
+    voice = request.data.get("voice_command")
 
-    # 음성 명령 처리 (선택적으로 로그 or 제어에 반영)
+    # 음성 명령 처리
     if voice:
         print(f"[VOICE CMD] {voice}")
-        # 예: 음성으로 'off'라고 하면 선풍기 정지
         if voice.lower() in ["off", "꺼", "정지"]:
             return Response({
                 "message": "Fan turned off by voice command",
                 "power_state": False
             }, status=status.HTTP_200_OK)
 
-    # 단순한 예시 제어 로직
+    # 제어 응답 데이터 구성
     response = {"mode": mode, "angle": None, "fan_speed": None}
 
+    # 사용자 위치 기반 회전 제어
     if mode == "follow" and user_x is not None:
-        # 사용자 위치에 따라 회전각도 조절
-        angle = max(0, min(180, float(user_x)))
-        response["angle"] = angle
+        response["angle"] = max(0, min(180, float(user_x)))
 
+    # 온도 기반 풍속 조절
     if temperature:
         if temperature > 30:
             response["fan_speed"] = 3
@@ -106,16 +125,119 @@ def control_fan(request):
 
     return Response(response, status=status.HTTP_200_OK)
 
-# 고온 경고 / 배터리 부족 알림
+
 @api_view(['POST'])
 def send_alert(request):
     """
-    특정 이벤트 발생 시 사용자에게 알림 전송
-    (ex. 고온 경고, 배터리 부족)
+    알림 전송 (고온, 배터리 부족 등)
     """
     event = request.data.get("event")
     device_id = request.data.get("device_id")
-
-    # 여기에 WebSocket / MQTT 연동 가능
     print(f"[ALERT] {device_id} - {event}")
     return Response({"message": f"Alert '{event}' sent for {device_id}"})
+
+
+# ------------------------
+# 사용자 인증 (회원가입 / 로그인)
+# ------------------------
+from django.contrib.auth.hashers import make_password, check_password
+
+@api_view(['POST'])
+def register_user(request):
+    """회원가입"""
+    user_id = request.data.get("user_id")
+    password = request.data.get("password")
+    name = request.data.get("name")
+
+    if not user_id or not password:
+        return Response({"error": "아이디와 비밀번호는 필수입니다."}, status=400)
+
+    if User.objects.filter(user_id=user_id).exists():
+        return Response({"error": "이미 존재하는 아이디입니다."}, status=400)
+
+    user = User.objects.create(
+        user_id=user_id,
+        password=make_password(password),
+        name=name
+    )
+    return Response({"message": "회원가입 성공", "user_id": user.user_id}, status=201)
+
+
+@api_view(['POST'])
+def login_user(request):
+    """로그인"""
+    user_id = request.data.get("user_id")
+    password = request.data.get("password")
+
+    try:
+        user = User.objects.get(user_id=user_id)
+    except User.DoesNotExist:
+        return Response({"error": "존재하지 않는 아이디입니다."}, status=400)
+
+    if check_password(password, user.password):
+        return Response({
+            "message": "로그인 성공",
+            "user_id": user.user_id,
+            "name": user.name
+        })
+    else:
+        return Response({"error": "비밀번호가 일치하지 않습니다."}, status=400)
+
+
+# ------------------------
+# 팀 생성 / 참가
+# ------------------------
+@api_view(['POST'])
+def create_team(request):
+    """팀 생성"""
+    team_name = request.data.get("team_name")
+    user_id = request.data.get("user_id")
+
+    user = User.objects.filter(user_id=user_id).first()
+    if not user:
+        return Response({"error": "존재하지 않는 사용자입니다."}, status=400)
+
+    team = Team.objects.create(team_name=team_name)
+    TeamUser.objects.create(team=team, user=user, role="admin")
+
+    return Response({
+        "message": "팀 생성 완료",
+        "team_id": team.team_id,
+        "team_name": team.team_name,
+        "admin": user.name
+    }, status=201)
+
+
+@api_view(['POST'])
+def join_team(request):
+    """팀 참가"""
+    team_name = request.data.get("team_name")
+    user_id = request.data.get("user_id")
+
+    team = Team.objects.filter(team_name=team_name).first()
+    if not team:
+        return Response({"error": "존재하지 않는 팀입니다."}, status=404)
+
+    user = User.objects.filter(user_id=user_id).first()
+    if not user:
+        return Response({"error": "존재하지 않는 사용자입니다."}, status=404)
+
+    TeamUser.objects.create(team=team, user=user, role="common_user")
+    return Response({"message": f"{user.name}님이 {team_name} 팀에 참가했습니다."})
+
+
+# ------------------------
+# AI 기반 사용자 추적 제어 확장
+# ------------------------
+@api_view(['POST'])
+def track_user(request):
+    """
+    AI 기반 사용자 위치 추적 및 회전각 계산
+    """
+    user_position = request.data.get("user_position")  # 예: {"x": 120, "y": 60}
+    if not user_position:
+        return Response({"error": "위치 정보가 없습니다."}, status=400)
+
+    x = float(user_position.get("x", 0))
+    angle = min(180, max(0, x))  # 예시 변환 로직
+    return Response({"angle": angle, "message": "사용자 방향으로 회전"})
