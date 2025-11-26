@@ -6,7 +6,7 @@ from .views import (
     SensorDataViewSet, FilterStatusViewSet,
     control_fan, send_alert,
     register_user, login_user,
-    create_team, join_team, track_user
+    create_team, join_team
 )
 
 router = DefaultRouter()
@@ -32,7 +32,6 @@ urlpatterns = [
 
     # --- AI/제어 기능 ---
     path('ai/control/', control_fan, name='control_fan'),
-    path('ai/track/', track_user, name='track_user'),
 
     # --- 알림 ---
     path('alert/', send_alert, name='send_alert'),

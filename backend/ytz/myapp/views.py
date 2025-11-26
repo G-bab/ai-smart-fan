@@ -225,19 +225,3 @@ def join_team(request):
     TeamUser.objects.create(team=team, user=user, role="common_user")
     return Response({"message": f"{user.name}님이 {team_name} 팀에 참가했습니다."})
 
-
-# ------------------------
-# AI 기반 사용자 추적 제어 확장
-# ------------------------
-@api_view(['POST'])
-def track_user(request):
-    """
-    AI 기반 사용자 위치 추적 및 회전각 계산
-    """
-    user_position = request.data.get("user_position")  # 예: {"x": 120, "y": 60}
-    if not user_position:
-        return Response({"error": "위치 정보가 없습니다."}, status=400)
-
-    x = float(user_position.get("x", 0))
-    angle = min(180, max(0, x))  # 예시 변환 로직
-    return Response({"angle": angle, "message": "사용자 방향으로 회전"})
