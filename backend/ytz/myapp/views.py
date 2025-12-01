@@ -21,6 +21,20 @@ class TeamViewSet(viewsets.ModelViewSet):
     queryset = Team.objects.all()
     serializer_class = TeamSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        user_id = request.query_params.get("user_id")
+        team_id = kwargs.get("pk")
+
+        # 해당 유저의 역할 확인
+        team_user = TeamUser.objects.filter(user__user_id=user_id, team__team_id=team_id).first()
+        if not team_user or team_user.role != "admin":
+            return Response({"error": "관리자만 팀을 삭제할 수 있습니다."}, status=403)
+
+        # 팀 삭제
+        team = self.get_object()
+        team.delete()
+        return Response({"message": "팀이 삭제되었습니다."}, status=200)
+
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

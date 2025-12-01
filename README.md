@@ -16,7 +16,7 @@ git add .
 
 3. 커밋 메시지와 함께 저장
 
-git commit -m "작업 내용 설명"
+git commit -m "작업내용설명"
 
 4. GitHub에 푸시
 
