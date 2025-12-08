@@ -83,6 +83,9 @@ def track_registered_person(model, cap, base_features):
         if not ret:
             break
 
+        h, w = frame.shape[:2]  # 프레임 크기
+        center_x, center_y = w // 2, h // 2  # 화면 중앙
+
         results = model.predict(source=frame, conf=0.5, verbose=False)
 
         best_sim = 0
@@ -97,17 +100,18 @@ def track_registered_person(model, cap, base_features):
             # base_features + dynamic_features 모두 비교
             all_features = base_features + dynamic_features
             sims = [cv2.compareHist(f, current_feature, cv2.HISTCMP_CORREL) for f in all_features]
-            avg_sim = sum(sims) / len(sims)
+            max_sim = max(sims) if sims else 0  # 평균 대신 최대값 사용
 
-            if avg_sim > best_sim:
-                best_sim = avg_sim
+            if max_sim > best_sim:
+                best_sim = max_sim
                 best_box = (x1, y1, x2, y2)
                 best_roi = roi
 
         # 등록된 사람만 표시
         if best_box and best_sim > 0.7:
             x1, y1, x2, y2 = best_box
-            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2  # 중앙 좌표 계산
+            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2  # 바운딩박스 중앙
+            rel_x, rel_y = cx - center_x, cy - center_y  # 화면 중앙 기준 좌표
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
             cv2.putText(frame, "Registered Person", (x1, y1-10),
@@ -115,13 +119,13 @@ def track_registered_person(model, cap, base_features):
             cv2.putText(frame, "Person", (x1, y2+30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
 
-            # 1초마다 중앙 좌표 출력
+            # 1초마다 중앙 좌표 출력 (화면 중앙 기준)
             if time.time() - last_print_time > 1:
-                print(f"📍 중앙 좌표: ({cx}, {cy})")
+                print(f"📍 중앙 기준 좌표: ({rel_x}, {rel_y})")
                 last_print_time = time.time()
 
             # 10초마다 새로운 특징 추가
-            if time.time() - last_capture_time > 5:
+            if time.time() - last_capture_time > 10 and best_sim > 0.8:  # 검증 조건 강화
                 new_feature = get_color_feature(best_roi)
                 dynamic_features.append(new_feature)
                 if len(dynamic_features) > 20:
