@@ -29,7 +29,7 @@ def register_person(model, cap):
             ret, frame = cap.read()
             if not ret:
                 continue
-            cv2.putText(frame, f"{direction} 준비중...", (30, 30),
+            cv2.putText(frame, f"{direction}", (30, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
             cv2.imshow("ai-smart-fan", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
