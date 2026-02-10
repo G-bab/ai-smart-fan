@@ -37,17 +37,33 @@ class User(models.Model):
 # 선풍기 (Device)
 # ---------------------------
 class Device(models.Model):
-    device_id = models.CharField(max_length=50, primary_key=True)  # Key
-    battery_level = models.IntegerField(null=True, blank=True)  # Field
-    ip_address = models.CharField(max_length=100, null=True, blank=True)  # Field2
-    power_state = models.BooleanField(default=False)  # Field3
-    fan_speed = models.IntegerField(default=1)  # Field4
-    angle = models.FloatField(default=0.0)  # Field5
-    last_sync = models.DateTimeField(auto_now=True)  # Field6
+    device_id = models.CharField(max_length=50, primary_key=True)
+
+    battery_level = models.IntegerField(null=True, blank=True)
+    ip_address = models.CharField(max_length=100, null=True, blank=True)
+
+    power_state = models.BooleanField(default=False)
+    fan_speed = models.IntegerField(default=1)
+    angle = models.FloatField(default=0.0)
+
+    # 🔥 여기 추가
+    MODE_CHOICES = [
+        ("normal", "Normal"),
+        ("rotate", "Rotate"),
+        ("following", "Following"),
+        ("tracking", "Tracking"),
+    ]
+
+    mode = models.CharField(
+        max_length=20,
+        choices=MODE_CHOICES,
+        default="normal"
+    )
+
+    last_sync = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.device_id} ({'ON' if self.power_state else 'OFF'})"
-
+        return f"{self.device_id} ({self.mode})"
 
 # ---------------------------
 # 센서 데이터 (SensorData)
@@ -60,7 +76,6 @@ class SensorData(models.Model):
     dust_density = models.FloatField(null=True, blank=True)  # Field3
     co2_level = models.FloatField(null=True, blank=True)  # Field4
     ir_detected = models.BooleanField(default=False)  # Field5
-    heatmap_temp = models.FloatField(null=True, blank=True)  # Field6
     created_at = models.DateTimeField(auto_now_add=True)  # Field7
 
     def __str__(self):

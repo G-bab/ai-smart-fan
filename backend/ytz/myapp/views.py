@@ -176,7 +176,7 @@ def control_fan(request):
         }, status=200)
 
     # AI 오류
-    VALID_ACTIONS = {"off", "on", "rotate", "none"}
+    VALID_ACTIONS = {"off", "on", "rotate", "following", "tracking", "none"}
 
     if action not in VALID_ACTIONS:
         return Response({
