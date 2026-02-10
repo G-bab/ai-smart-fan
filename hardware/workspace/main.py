@@ -12,7 +12,7 @@ from datetime import datetime
 
 # -------------------------------
 # 설정
-BASE_URL = "http://127.0.0.1:8000/api"
+BASE_URL = "http://192.168.0.20:8000/api"
 SERIAL_PORT = "/dev/ttyUSB0"
 BAUD_RATE = 115200
 
@@ -70,14 +70,67 @@ def safe_post_request(endpoint, data):
 def run_startup_tasks():
     print("🚀 초기 데이터 전송 시작...")
     safe_post_request("/devices/", {
-        "device_id": "fan01", "battery_level": 85, "ip_address": "192.168.0.147",
+        "device_id": "fan05", "battery_level": 85, "ip_address": "192.168.0.147",
         "power_state": False, "fan_speed": 1, "angle": 0
-    })
-    safe_post_request("/sensors/", {
-        "device": "fan01", "temperature": 29.8, "humidity": 42.5, "co2_level": 410, "ir_detected": False
     })
     # 필요하면 ai_control, track_user 등도 여기에 추가
 
+# -------------------------------
+# ★ 백엔드 요청 전송 도우미 함수 (요청한 출력 포맷 적용)
+def send_to_backend(endpoint: str, payload: dict, command_name: str):
+    url = f"{BASE_URL}{endpoint}"
+    try:
+        # 타임아웃 2초 설정 (서버가 안 켜져 있어도 멈추지 않게)
+        response = requests.post(url, json=payload, timeout=2)
+        
+        # 성공 (200번대)
+        if 200 <= response.status_code < 300:
+            print(f"{{{response.status_code}}}: {command_name} has been sent!")
+        # 실패 (400, 500번대)
+        else:
+            print(f"{{{response.status_code}}}: request error (Server msg: {response.text})")
+            
+    except requests.exceptions.ConnectionError:
+        print(f"{{Error}}: request error (Cannot connect to Backend at {url})")
+    except Exception as e:
+        print(f"{{Error}}: request error ({str(e)})")
+
+# ★ 시나리오별 실행 함수들
+def run_startup_tasks():
+    print("\n🚀 [System Startup] 백엔드 연결 테스트 시작...\n")
+
+    # 1️⃣ 디바이스 생성 (기존)
+    send_to_backend("/devices/", {
+        "device_id": "fan5296",
+        "battery_level": 41,
+        "ip_address": "192.168.0.147",
+        "power_state": False,
+        "fan_speed": 300,
+        "angle": 15
+    }, "Device Creation")
+
+    # 3️⃣ 센서 데이터 업로드
+    send_to_backend("/sensors/", {
+        "device": "fan5296",
+        "temperature": 50.3,
+        "humidity": 1.4,
+        "co2_level": 15,
+        "ir_detected": False
+    }, "Sensor Data Upload")
+
+    send_to_backend("/ai/control/", {
+        "mode": "follow",
+        "user_x": 30,
+        "temperature": 15.1,
+        "voice_command": "켜"
+    }, "Sensor Data Upload")
+
+    send_to_backend("/alert/", {
+        "device_id": "fan5296",
+        "event": "습도 높음"
+    }, "Error sent")
+    
+    print("\n✅ [System Startup] 테스트 완료.\n")
 # -------------------------------
 # ★ Lifespan: 앱이 켜지고 꺼질 때 실행될 로직
 @asynccontextmanager
@@ -114,7 +167,15 @@ app = FastAPI(title="RPi-ESP32 Bridge", lifespan=lifespan)
 
 @app.get("/")
 def root():
-    return {"status": "Raspberry Pi FastAPI running"}
+    return JSONResponse({
+            "status": "Raspberry Pi FastAPI running",
+            "device_id": "fan5296",
+            "battery_level": 41,
+            "ip_address": "192.168.0.147",
+            "power_state": True,
+            "fan_speed": 300,
+            "angle": 15
+        })
 
 @app.get("/sensor/pm25")
 def get_pm25_grimm():

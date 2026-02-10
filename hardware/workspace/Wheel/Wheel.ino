@@ -1,3 +1,4 @@
+"""
 #include <Wire.h>
 #include <pm2008_i2c.h>
 
@@ -133,4 +134,166 @@ void handleCommand(String cmd) {
   else {
     Serial.println("Unknown command.");
   }
+}
+"""
+
+#include <Wire.h>
+#include <pm2008_i2c.h>
+
+// --- 핀 설정 ---
+#define LEFT_IN1   2
+#define LEFT_IN2   3
+#define LEFT_PWM   4
+
+#define RIGHT_IN1  5
+#define RIGHT_IN2  6
+#define RIGHT_PWM  7
+
+#define FAN        8
+
+// --- PWM 설정 (ESP32 전용) ---
+const int PWM_FREQ = 20000;
+const int PWM_RES  = 8;
+const int CH_LEFT  = 0;
+const int CH_RIGHT = 1;
+const int CH_FAN   = 2; // [수정] 팬을 위한 PWM 채널 추가
+
+String inputString = "";
+
+// PM2008M 객체
+PM2008_I2C pm2008_i2c;
+uint16_t pm25_grimm = 0;
+unsigned long lastPmRead = 0;
+const unsigned long PM_READ_INTERVAL = 1000; 
+
+// --- 모터 제어 함수 ---
+void setMotor(int in1, int in2, int pwmChannel, int speed, int direction) {
+  // speed 범위 보호
+  speed = constrain(speed, 0, 255);
+
+  if (direction == 1) { // 정방향
+    digitalWrite(in1, HIGH);
+    digitalWrite(in2, LOW);
+  } else if (direction == -1) { // 역방향
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, HIGH);
+  } else { // 정지
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, LOW);
+    speed = 0; // 정지면 PWM도 0으로
+  }
+  ledcWrite(pwmChannel, speed);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // 핀 모드 설정
+  pinMode(LEFT_IN1, OUTPUT);
+  pinMode(LEFT_IN2, OUTPUT);
+  pinMode(RIGHT_IN1, OUTPUT);
+  pinMode(RIGHT_IN2, OUTPUT);
+  pinMode(FAN, OUTPUT);
+
+  // PWM 채널 할당 (Ledc)
+  ledcSetup(CH_LEFT, PWM_FREQ, PWM_RES);
+  ledcSetup(CH_RIGHT, PWM_FREQ, PWM_RES);
+  ledcSetup(CH_FAN, PWM_FREQ, PWM_RES); // [수정] 팬 설정 추가
+
+  ledcAttachPin(LEFT_PWM, CH_LEFT);
+  ledcAttachPin(RIGHT_PWM, CH_RIGHT);
+  ledcAttachPin(FAN, CH_FAN);           // [수정] 팬 핀 연결
+
+  // I2C & 센서 초기화
+  Wire.begin();
+  pm2008_i2c.begin();
+  pm2008_i2c.command();
+  delay(1000);
+
+  // [중요] 파이썬이 "online" 상태로 인식하게 할 첫 신호 (선택사항)
+  // Serial.println("STATUS:READY"); 
+}
+
+void loop() {
+  // 1. 명령 수신
+  if (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      inputString.trim();
+      handleCommand(inputString);
+      inputString = "";
+    } else {
+      inputString += c;
+    }
+  }
+
+  // 2. 센서 데이터 전송 (주기적)
+  unsigned long now = millis();
+  if (now - lastPmRead >= PM_READ_INTERVAL) {
+    lastPmRead = now;
+    readAndSendSensorData();
+  }
+}
+
+// --- [핵심] 파이썬 친화적 데이터 전송 함수 ---
+void readAndSendSensorData() {
+  uint8_t ret = pm2008_i2c.read();
+  if (ret == 0) {
+    pm25_grimm = pm2008_i2c.pm2p5_grimm;
+    
+    // [수정] 파이썬 파싱 로직(split(':'))에 맞게 포맷 변경
+    // 기존: "PM2.5 (GRIMM) : 10" -> 변경: "PM25:10"
+    Serial.print("PM25:");
+    Serial.println(pm25_grimm);
+    
+  } else {
+    // 에러 로그는 디버깅용으로 놔두되, 파이썬이 무시할 수 있는 형태면 좋음
+    // 여기선 그냥 둠
+    // Serial.println("LOG:Sensor Error");
+  }
+}
+
+// --- 명령 처리 함수 ---
+void handleCommand(String cmd) {
+  cmd.toUpperCase();
+  
+  // [옵션] 디버깅용 에코 (파이썬에서 로그로 찍힘)
+  // Serial.print("LOG:Executed "); Serial.println(cmd);
+
+  // 이동 로직 (YOLO 추적용)
+  if (cmd == "MOVE FWD") {
+    setMotor(LEFT_IN1, LEFT_IN2, CH_LEFT, 200, 1);
+    setMotor(RIGHT_IN1, RIGHT_IN2, CH_RIGHT, 200, 1);
+  } 
+  else if (cmd == "MOVE BACK") {
+    setMotor(LEFT_IN1, LEFT_IN2, CH_LEFT, 200, -1);
+    setMotor(RIGHT_IN1, RIGHT_IN2, CH_RIGHT, 200, -1);
+  }
+  else if (cmd == "MOVE LEFT") {
+    setMotor(LEFT_IN1, LEFT_IN2, CH_LEFT, 150, -1); // 회전 속도 약간 줄임
+    setMotor(RIGHT_IN1, RIGHT_IN2, CH_RIGHT, 150, 1);
+  } 
+  else if (cmd == "MOVE RIGHT") {
+    setMotor(LEFT_IN1, LEFT_IN2, CH_LEFT, 150, 1);
+    setMotor(RIGHT_IN1, RIGHT_IN2, CH_RIGHT, 150, -1);
+  } 
+  else if (cmd == "STOP") {
+    setMotor(LEFT_IN1, LEFT_IN2, CH_LEFT, 0, 0);
+    setMotor(RIGHT_IN1, RIGHT_IN2, CH_RIGHT, 0, 0);
+  } 
+  // 팬 제어 ("FAN 255")
+  else if (cmd.startsWith("FAN")) {
+    // 공백 뒤 숫자 파싱
+    int spaceIndex = cmd.indexOf(' ');
+    if (spaceIndex != -1) {
+      String valStr = cmd.substring(spaceIndex + 1);
+      int speed = valStr.toInt();
+      speed = constrain(speed, 0, 255);
+      
+      ledcWrite(CH_FAN, speed); // [수정] analogWrite -> ledcWrite
+      
+      // 상태 확인용 피드백 (필요하면)
+      // Serial.print("FAN_STATE:"); Serial.println(speed);
+    }
+  } 
 }
