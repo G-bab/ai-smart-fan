@@ -219,6 +219,32 @@ def send_alert(request):
     print(f"[ALERT] {device_id} - {event}")
     return Response({"message": f"Alert '{event}' sent for {device_id}"})
 
+# 디바이스 등록
+@api_view(['POST'])
+def register_device(request):
+    device_id = request.data.get("device_id")
+    ip_address = request.data.get("ip_address")
+    battery_level = request.data.get("battery_level")
+
+    if not device_id:
+        return Response({"error": "device_id 필수"}, status=400)
+
+    device, created = Device.objects.update_or_create(
+        device_id=device_id,
+        defaults={
+            "ip_address": ip_address,
+            "battery_level": battery_level,
+            "last_sync": timezone.now(),
+            "power_state": False,
+            "fan_speed": 1,
+            "angle": 0.0,
+        }
+    )
+
+    return Response({
+        "message": "device registered" if created else "device updated",
+        "device_id": device.device_id
+    })
 
 # ------------------------
 # 사용자 인증 (회원가입)
@@ -273,8 +299,11 @@ def create_team(request):
     user = User.objects.filter(user_id=user_id).first()
     device = Device.objects.filter(device_id=device_id).first()
 
-    if not user or not device:
-        return Response({"error": "사용자 또는 디바이스 없음"}, status=400)
+    if not user:
+        return Response({"error": "사용자 없음"}, status=400)
+
+    if not device:
+        return Response({"error": "등록되지 않은 디바이스입니다. 먼저 기기를 켜주세요."}, status=400)
 
     if TeamDevice.objects.filter(device=device).exists():
         return Response({"error": "이미 다른 팀에 등록된 디바이스"}, status=400)

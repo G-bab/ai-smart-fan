@@ -4,7 +4,7 @@ from .views import (
     TeamViewSet, UserViewSet, DeviceViewSet,
     TeamUserViewSet, TeamDeviceViewSet,
     SensorDataViewSet, FilterStatusViewSet,
-    control_fan, send_alert,
+    control_fan, send_alert, register_device,
     register_user, login_user, get_my_role,
     create_team, join_team, find_user_id, reset_password,
     set_sub_admin, remove_team_user,
@@ -30,6 +30,8 @@ urlpatterns = [
     path('auth/reset-password/', reset_password, name='reset_password'),
 
     # --- 팀 관련 ---
+    path('device/register/', register_device, name='register_device'),
+
     path('team/create/', create_team, name='create_team'),
     path('team/join/', join_team, name='join_team'),
     path('team/my-role/', get_my_role, name='get_my_role'),
