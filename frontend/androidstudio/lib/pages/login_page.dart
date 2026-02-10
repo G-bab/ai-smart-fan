@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import 'signup_page.dart';
+import '../user_session.dart';
 
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // TextField 컨트롤러 추가
+    final TextEditingController emailController = TextEditingController();
+    final TextEditingController passwordController = TextEditingController();
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Padding(
@@ -21,19 +27,22 @@ class LoginPage extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-
             const SizedBox(height: 40),
 
-            const TextField(
-              decoration: InputDecoration(
+            // 아이디 TextField
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(
                 labelText: "아이디",
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
 
-            const TextField(
-              decoration: InputDecoration(
+            // 비밀번호 TextField
+            TextField(
+              controller: passwordController,
+              decoration: const InputDecoration(
                 labelText: "비밀번호",
                 border: OutlineInputBorder(),
               ),
@@ -41,10 +50,29 @@ class LoginPage extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // 🔹 로그인 버튼 (살짝 둥글고 글씨 흰색)
+            // 로그인 버튼 → API 연동
             ElevatedButton(
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/fan');
+              onPressed: () async {
+                final result = await ApiService.login(
+                  emailController.text.trim(),
+                  passwordController.text.trim(),
+                );
+
+                if (result != null && result['user_id'] != null) {
+                  // ✅ 로그인한 아이디 저장
+                  UserSession.userId = result['user_id'];
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("로그인 성공")),
+                  );
+
+                  Navigator.pushReplacementNamed(context, '/fan');
+                }
+                else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("로그인 실패")),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 56),
@@ -57,24 +85,24 @@ class LoginPage extends StatelessWidget {
                 "로그인",
                 style: TextStyle(
                   fontSize: 18,
-                  color: Colors.white, // ← 흰색
+                  color: Colors.white,
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
 
             TextButton(
-              onPressed: () {},
+              onPressed: () {
+                Navigator.pushNamed(context, '/forgot_password');
+              },
               child: const Text(
-                "비밀번호를 잊으셨나요?",
+                "아이디 찾기/비밀번호 재설정",
                 style: TextStyle(
                   color: Colors.grey,
                   fontSize: 14,
                 ),
               ),
             ),
-
             const SizedBox(height: 40),
 
             Row(

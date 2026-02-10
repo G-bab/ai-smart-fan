@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import '../user_session.dart';
 
 class SmartFanScreen extends StatefulWidget {
   const SmartFanScreen({super.key});
@@ -10,10 +12,9 @@ class SmartFanScreen extends StatefulWidget {
 
 class _SmartFanScreenState extends State<SmartFanScreen>
     with SingleTickerProviderStateMixin {
-  // UI 상태값들 (원래 있던 항목들)
   bool followMode = true;
   bool isRotating = false;
-  double windLevel = 2; // 풍속 1~3
+  double windLevel = 2;
   int batteryLevel = 85;
   double temperature = 24.0;
 
@@ -23,11 +24,29 @@ class _SmartFanScreenState extends State<SmartFanScreen>
   void initState() {
     super.initState();
 
-    // 기본 duration은 2초 (중간 속도)
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     );
+
+    _loadFanStatus();
+  }
+
+  // -------------------------------------------
+  // 🔥 서버에서 선풍기 현재 상태 가져오기 (device_id = 1)
+  // -------------------------------------------
+  Future<void> _loadFanStatus() async {
+    final data = await ApiService.getDevice(1);
+
+    if (data != null) {
+      setState(() {
+        windLevel = (data["fan_speed"] ?? 1).toDouble();
+        isRotating = data["power_state"] ?? false;
+        temperature = (data["temperature"] ?? 24.0).toDouble();
+
+        if (isRotating) _controller.repeat();
+      });
+    }
   }
 
   @override
@@ -36,7 +55,6 @@ class _SmartFanScreenState extends State<SmartFanScreen>
     super.dispose();
   }
 
-  // 배터리 아이콘 결정 함수
   IconData getBatteryIcon() {
     if (batteryLevel >= 90) return Icons.battery_full;
     if (batteryLevel >= 70) return Icons.battery_6_bar;
@@ -46,34 +64,25 @@ class _SmartFanScreenState extends State<SmartFanScreen>
     return Icons.battery_alert;
   }
 
-  // 풍속에 따라 애니메이션 속도(컨트롤러 duration) 적용
   void _applyRotationSpeed() {
-    // windLevel: 1 => 느림, 2 => 보통, 3 => 빠름
     Duration newDuration;
-    if (windLevel.round() == 1) {
-      newDuration = const Duration(seconds: 4);
-    } else if (windLevel.round() == 2) {
-      newDuration = const Duration(seconds: 2);
-    } else {
-      // 3단
-      newDuration = const Duration(seconds: 1);
-    }
+    if (windLevel.round() == 1) newDuration = const Duration(seconds: 4);
+    else if (windLevel.round() == 2) newDuration = const Duration(seconds: 2);
+    else newDuration = const Duration(seconds: 1);
 
-    // 변경 시 기존 애니메이션을 멈추고 새 duration 적용 후 필요 시 재생
     final wasRunning = _controller.isAnimating;
     _controller.stop();
     _controller.duration = newDuration;
-    if (isRotating && wasRunning) {
-      _controller.repeat();
-    }
+    if (isRotating && wasRunning) _controller.repeat();
   }
 
-  // 회전 토글
-  void _toggleRotation() {
+  // -------------------------------------------
+  // 🔥 회전 ON/OFF → 서버에 PATCH 전송
+  // -------------------------------------------
+  void _toggleRotation() async {
     setState(() {
       isRotating = !isRotating;
       if (isRotating) {
-        // 배터리 감소(예시)
         batteryLevel = (batteryLevel - 5).clamp(0, 100);
         _applyRotationSpeed();
         _controller.repeat();
@@ -81,105 +90,106 @@ class _SmartFanScreenState extends State<SmartFanScreen>
         _controller.stop();
       }
     });
+
+    await ApiService.updateDevice(1, {
+      "power_state": isRotating,
+      "fan_speed": windLevel.round(),
+    });
   }
 
-  // AI 추천 (간단 예시: 랜덤 혹은 온도/배터리 기반 추천)
-  void _applyAiRecommendation() {
-    setState(() {
-      // 예: 온도가 높으면 세게, 배터리가 낮으면 약하게
-      if (batteryLevel < 20) {
-        windLevel = 1;
-      } else if (temperature >= 26.0) {
-        windLevel = 3;
-      } else {
-        // 랜덤 추천 보조
-        windLevel = (Random().nextInt(3) + 1).toDouble();
-      }
+  // -------------------------------------------
+  // 🔥 AI 맞춤 추천 → 서버 AI API 연동
+  // -------------------------------------------
+  void _applyAiRecommendation() async {
+    final body = {
+      "mode": followMode ? "follow" : "auto",
+      "user_x": 120, // 임시값 (추후 실제 값 사용 가능)
+      "temperature": temperature,
+      "voice_command": null
+    };
 
-      // 자동으로 회전 시작
-      isRotating = true;
-      _applyRotationSpeed();
-      _controller.repeat();
-    });
+    final res = await ApiService.controlAi(body);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("AI가 ${windLevel.round()}단 바람을 추천했습니다."),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    if (res != null) {
+      setState(() {
+        if (res["fan_speed"] != null) {
+          windLevel = (res["fan_speed"]).toDouble();
+        }
+
+        isRotating = true;
+        _applyRotationSpeed();
+        _controller.repeat();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("AI 추천: ${windLevel.round()}단 바람")),
+      );
+
+      await ApiService.updateDevice(1, {
+        "power_state": isRotating,
+        "fan_speed": windLevel.round(),
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("AI 추천 실패")),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // build에서 updateRotationSpeed 직접 호출하면 불필요한 호출 가능성 있으니
-    // 풍속이 변경될 때마다 _applyRotationSpeed를 호출하도록 구현했음.
-
     return Scaffold(
       backgroundColor: Colors.white,
+
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu, size: 30, color: Colors.black),
+          onPressed: () {
+            _showTeamSelector(context);
+          },
+        ),
+      ),
+
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 상단 타이틀 + 팔로우모드 스위치
+              // --- UI 그대로 유지 ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 타이틀 + 온도/배터리
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
                         "AI 스마트 선풍기",
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Text(
-                            "${temperature.toInt()}° ",
-                            style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Icon(
-                            getBatteryIcon(),
-                            color: Colors.black87,
-                            size: 22,
-                          ),
+                          Text("${temperature.toInt()}° ",
+                              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+                          Icon(getBatteryIcon(), color: Colors.black87, size: 22),
                           const SizedBox(width: 4),
-                          Text(
-                            "$batteryLevel%",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          Text("$batteryLevel%",
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ],
                   ),
-
-                  // 팔로우 모드 스위치
                   Column(
                     children: [
                       Switch(
                         activeColor: Colors.blue,
                         value: followMode,
-                        onChanged: (val) {
-                          setState(() => followMode = val);
-                        },
+                        onChanged: (val) => setState(() => followMode = val),
                       ),
-                      const Text(
-                        "팔로우모드",
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
+                      const Text("팔로우모드", style: TextStyle(fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ],
@@ -187,44 +197,24 @@ class _SmartFanScreenState extends State<SmartFanScreen>
 
               const SizedBox(height: 24),
 
-              // 선풍기 이미지 (원래 이미지 사용)
               RotationTransition(
                 turns: _controller.drive(Tween(begin: 0.0, end: 1.0)),
-                child: Image.asset(
-                  'assets/fan.png',
-                  width: 200,
-                  height: 200,
-                ),
+                child: Image.asset('assets/fan.png', width: 200, height: 200),
               ),
 
               const SizedBox(height: 12),
-
-              // 회전 상태 텍스트
-              Text(
-                isRotating ? "회전 중" : "정지",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(isRotating ? "회전 중" : "정지",
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 
               const SizedBox(height: 28),
 
-              // 풍속 라벨
               Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  Text(
-                    "풍속 : ${windLevel.round()}단",
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Text("풍속 : ${windLevel.round()}단",
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
                 ],
               ),
-
-              // 풍속 슬라이더
               Slider(
                 value: windLevel,
                 min: 1,
@@ -237,53 +227,43 @@ class _SmartFanScreenState extends State<SmartFanScreen>
                     windLevel = value;
                     _applyRotationSpeed();
                   });
+
+                  ApiService.updateDevice(1, {
+                    "fan_speed": windLevel.round(),
+                    "power_state": isRotating,
+                  });
                 },
               ),
 
               const SizedBox(height: 32),
 
-              // 회전 토글 + AI 추천 버튼
               Column(
                 children: [
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 56),
-                      backgroundColor:
-                      isRotating ? Colors.grey[200] : Colors.blue,
-                      foregroundColor:
-                      isRotating ? Colors.black : Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      backgroundColor: isRotating ? Colors.grey[200] : Colors.blue,
+                      foregroundColor: isRotating ? Colors.black : Colors.white,
+                      shape:
+                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     onPressed: _toggleRotation,
                     child: Text(
                       isRotating ? "회전 OFF" : "회전 ON",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 56),
                       backgroundColor: Colors.lightBlueAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     icon: const Icon(Icons.smart_toy_outlined, color: Colors.white),
                     label: const Text(
                       "AI 맞춤 바람 추천",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     onPressed: _applyAiRecommendation,
                   ),
@@ -293,6 +273,77 @@ class _SmartFanScreenState extends State<SmartFanScreen>
           ),
         ),
       ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        type: BottomNavigationBarType.fixed,
+        onTap: (index) {
+          if (index == 0) Navigator.pushReplacementNamed(context, '/fan');
+          else if (index == 1) Navigator.pushReplacementNamed(context, '/device');
+          else if (index == 2) Navigator.pushReplacementNamed(context, '/team_manager');
+          else if (index == 3) Navigator.pushReplacementNamed(context, '/mypage');
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "홈"),
+          BottomNavigationBarItem(icon: Icon(Icons.devices), label: "기기"),
+          BottomNavigationBarItem(icon: Icon(Icons.group), label: "팀"),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "MY"),
+        ],
+      ),
     );
   }
+  void _showTeamSelector(BuildContext context) {
+    final teams = ["팀1", "팀2", "팀3"];
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "팀 선택",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+
+              ...teams.map(
+                    (team) => Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        UserSession.selectedTeamId =
+                        team == "Team A" ? 1 : team == "Team B" ? 2 : 3;
+                      });
+
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("$team 선택됨")),
+                      );
+                    },
+
+
+                    child: Text(
+                      team,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
 }
