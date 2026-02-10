@@ -137,7 +137,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
                 // 로그아웃 버튼
                 InkWell(
-                  onTap: () {},
+                  onTap: () {
+                    UserSession.clear();
+
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login',
+                          (route) => false,
+                    );
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
                     decoration: BoxDecoration(

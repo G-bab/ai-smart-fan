@@ -6,7 +6,14 @@ class TeamPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 회원가입/로그인에서 전달된 userId 받아오기
-    final userId = ModalRoute.of(context)!.settings.arguments as String;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final userId = args is String ? args : "";
+
+    if (userId.isEmpty) {
+      return const Scaffold(
+        body: Center(child: Text("잘못된 접근입니다")),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,

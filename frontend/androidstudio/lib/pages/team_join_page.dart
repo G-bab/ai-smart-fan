@@ -12,6 +12,7 @@ class TeamJoinPage extends StatefulWidget {
 
 class _TeamJoinPageState extends State<TeamJoinPage> {
   final TextEditingController teamNameController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -45,23 +46,25 @@ class _TeamJoinPageState extends State<TeamJoinPage> {
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 16),
 
             TextField(
-              controller: teamNameController,
+              controller: passwordController,
               decoration: const InputDecoration(
                 labelText: "비밀번호",
                 border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 32),
 
             ElevatedButton(
               onPressed: () async {
                 final res = await ApiService.joinTeam(
-                  teamNameController.text.trim(),
-                  widget.userId,
+                  teamName: teamNameController.text.trim(),
+                  teamPassword: passwordController.text.trim(),
+                  userId: widget.userId,
                 );
+
 
                 if (res != null) {
                   ScaffoldMessenger.of(context).showSnackBar(

@@ -22,6 +22,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final newPasswordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
 
+  // 🔥 서버 주소
+  final String baseUrl = "http://YOUR_SERVER_URL";
+
   Future<void> resetPassword() async {
     final newPw = newPasswordController.text.trim();
     final confirmPw = confirmPasswordController.text.trim();
@@ -36,21 +39,31 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
-    final response = await http.post(
-      Uri.parse("http://YOUR_SERVER_URL/auth/reset-password"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "id": widget.userId,
-        "name": widget.name,
-        "birth": widget.birth,
-        "newPassword": newPw,
-      }),
-    );
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/auth/reset-password"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "user_id": widget.userId,
+          "name": widget.name,
+          "birth": widget.birth,
+          "new_password": newPw,
+        }),
+      );
 
-    if (response.statusCode == 200) {
-      _showDialog("완료", "비밀번호가 재설정되었습니다", success: true);
-    } else {
-      _showDialog("실패", "비밀번호 재설정에 실패했습니다");
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data["message"] == "비밀번호 변경 성공") {
+          _showDialog("완료", "비밀번호가 재설정되었습니다", success: true);
+        } else {
+          _showDialog("실패", data["message"] ?? "비밀번호 재설정 실패");
+        }
+      } else {
+        _showDialog("실패", "서버 오류 (${response.statusCode})");
+      }
+    } catch (e) {
+      _showDialog("오류", "네트워크 오류 발생");
     }
   }
 
@@ -65,7 +78,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             onPressed: () {
               Navigator.pop(context);
               if (success) {
-                Navigator.pop(context); // 비밀번호 찾기 화면으로 돌아가기
+                Navigator.pop(context); // 이전 화면으로
               }
             },
             child: const Text("확인"),

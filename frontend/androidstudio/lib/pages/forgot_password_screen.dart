@@ -1,37 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'reset_password_screen.dart';
-
-
-// 날짜 자동 입력 formatter
-class DateInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue,
-      TextEditingValue newValue,
-      ) {
-    if (newValue.text.length < oldValue.text.length) {
-      return newValue;
-    }
-
-    String text = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    final buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      buffer.write(text[i]);
-      if (i == 3 || i == 5) buffer.write('-');
-    }
-
-    final result = buffer.toString();
-
-    return TextEditingValue(
-      text: result,
-      selection: TextSelection.collapsed(offset: result.length),
-    );
-  }
-}
 
 class ForgotPasswordScreen extends StatelessWidget {
   ForgotPasswordScreen({super.key});
@@ -39,18 +9,23 @@ class ForgotPasswordScreen extends StatelessWidget {
   final idController = TextEditingController();
   final nameController = TextEditingController();
   final birthController = TextEditingController();
-  final newPwController = TextEditingController();
+
+  static const String baseUrl =
+      "https://occupational-evaluate-granny-cartoon.trycloudflare.com/api";
 
   // 🔹 아이디 찾기
   Future<void> findId(BuildContext context) async {
     final response = await http.post(
-      Uri.parse("http://YOUR_SERVER_URL/auth/find-id"),
+      Uri.parse("$baseUrl/auth/find-id/"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         "name": nameController.text.trim(),
-        "birth": birthController.text.trim(),
+        "birth_date": birthController.text.trim(),
       }),
     );
+
+    print("FIND ID STATUS: ${response.statusCode}");
+    print("FIND ID BODY: ${response.body}");
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -59,7 +34,7 @@ class ForgotPasswordScreen extends StatelessWidget {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text("아이디 찾기 결과"),
-          content: Text("아이디는 ${data["userId"]} 입니다"),
+          content: Text("아이디는 ${data["user_id"]} 입니다"),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -73,17 +48,21 @@ class ForgotPasswordScreen extends StatelessWidget {
     }
   }
 
-  // 🔹 비밀번호 재설정
+  // 🔹 비밀번호 재설정 → 검증 성공 시 새 비밀번호 입력 화면 이동
   Future<void> verifyUser(BuildContext context) async {
     final response = await http.post(
-      Uri.parse("http://YOUR_SERVER_URL/auth/verify-user"),
+      Uri.parse("$baseUrl/auth/reset-password/"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "id": idController.text.trim(),
+        "user_id": idController.text.trim(),
         "name": nameController.text.trim(),
-        "birth": birthController.text.trim(),
+        "birth_date": birthController.text.trim(),
+        "new_password": "temp", // 임시값 (다음 화면에서 실제 변경)
       }),
     );
+
+    print("VERIFY STATUS: ${response.statusCode}");
+    print("VERIFY BODY: ${response.body}");
 
     if (response.statusCode == 200) {
       Navigator.push(
@@ -117,6 +96,32 @@ class ForgotPasswordScreen extends StatelessWidget {
     );
   }
 
+  // 🔹 날짜 선택 위젯
+  Widget _buildDatePicker(BuildContext context) {
+    return TextField(
+      controller: birthController,
+      readOnly: true,
+      decoration: const InputDecoration(
+        labelText: "생년월일",
+        border: OutlineInputBorder(),
+        suffixIcon: Icon(Icons.calendar_today),
+      ),
+      onTap: () async {
+        DateTime? pickedDate = await showDatePicker(
+          context: context,
+          initialDate: DateTime(2000),
+          firstDate: DateTime(1900),
+          lastDate: DateTime.now(),
+        );
+
+        if (pickedDate != null) {
+          birthController.text =
+          "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -133,10 +138,7 @@ class ForgotPasswordScreen extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            // 🔹 아이디 찾기 탭
             _buildFindIdTab(context),
-
-            // 🔹 비밀번호 재설정 탭
             _buildResetPasswordTab(context),
           ],
         ),
@@ -144,6 +146,7 @@ class ForgotPasswordScreen extends StatelessWidget {
     );
   }
 
+  // 🔹 아이디 찾기
   Widget _buildFindIdTab(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -158,19 +161,8 @@ class ForgotPasswordScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          TextField(
-            controller: birthController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              DateInputFormatter(),
-              LengthLimitingTextInputFormatter(10),
-            ],
-            decoration: const InputDecoration(
-              labelText: "생년월일",
-              hintText: "YYYY-MM-DD",
-              border: OutlineInputBorder(),
-            ),
-          ),
+          _buildDatePicker(context),
+
           const SizedBox(height: 30),
 
           ElevatedButton(
@@ -182,6 +174,7 @@ class ForgotPasswordScreen extends StatelessWidget {
     );
   }
 
+  // 🔹 비밀번호 재설정
   Widget _buildResetPasswordTab(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -206,26 +199,14 @@ class ForgotPasswordScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            TextField(
-              controller: birthController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                DateInputFormatter(),
-                LengthLimitingTextInputFormatter(10),
-              ],
-              decoration: const InputDecoration(
-                labelText: "생년월일",
-                hintText: "YYYY-MM-DD",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
+            _buildDatePicker(context),
+
+            const SizedBox(height: 30),
 
             ElevatedButton(
               onPressed: () => verifyUser(context),
-              child: const Text("비밀번호 재설정"),
+              child: const Text("다음"),
             ),
-
           ],
         ),
       ),

@@ -61,6 +61,7 @@ class LoginPage extends StatelessWidget {
                 if (result != null && result['user_id'] != null) {
                   // ✅ 로그인한 아이디 저장
                   UserSession.userId = result['user_id'];
+                  UserSession.name = result['name'];
 
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("로그인 성공")),

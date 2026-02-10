@@ -32,7 +32,7 @@ class SignupPage extends StatelessWidget {
             TextField(
               controller: emailController,
               decoration: const InputDecoration(
-                labelText: "아이디",
+                labelText: "아이디 (영문이랑 숫자만 가능)",
                 border: OutlineInputBorder(),
               ),
             ),
@@ -98,6 +98,14 @@ class SignupPage extends StatelessWidget {
             // 🔹 가입하기 버튼
             ElevatedButton(
               onPressed: () async {
+                // ✅ 생년월일 선택 여부 체크 (추가)
+                if (birthController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("생년월일을 선택해주세요")),
+                  );
+                  return;
+                }
+
                 // 비밀번호 확인 체크
                 if (passwordController.text != passwordConfirmController.text) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -107,11 +115,12 @@ class SignupPage extends StatelessWidget {
                 }
 
                 final result = await ApiService.register(
-                  emailController.text.trim(),   // user_id
+                  emailController.text.trim(),
                   passwordController.text.trim(),
-                  nameController.text.trim(),    // name
-                  birthController.text.trim(),   // birth_date
+                  nameController.text.trim(),
+                  birthController.text.trim(),
                 );
+
 
 
                 if (result != null && result['user_id'] != null) {

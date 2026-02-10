@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'profile_edit_screen.dart';
 import '../user_session.dart';
+import '../services/api_service.dart';
 
 
 class MyPage extends StatefulWidget {
@@ -12,11 +13,14 @@ class MyPage extends StatefulWidget {
 
 class _MyPageState extends State<MyPage> {
   String? userId;
+  String? userName;
+
 
   @override
   void initState() {
     super.initState();
-    userId = UserSession.userId; // ✅ 로그인한 아이디 가져오기
+    userId = UserSession.userId;// ✅ 로그인한 아이디 가져오기
+    userName = UserSession.name;
   }
 
   @override
@@ -57,12 +61,13 @@ class _MyPageState extends State<MyPage> {
                     // 아이디
                     Expanded(
                       child: Text(
-                        userId ?? "아이디 없음",
+                        "${userName ?? ""} (${userId ?? ""})",
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+
                     ),
 
                     // 편집 버튼
@@ -94,7 +99,27 @@ class _MyPageState extends State<MyPage> {
               // 탈퇴하기
               Center(
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () async {
+                    if (userId == null) return;
+
+                    final ok = await ApiService.withdraw(userId!);
+
+                    if (ok) {
+                      UserSession.clear();
+
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/login',
+                            (route) => false,
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("탈퇴 실패")),
+                      );
+                    }
+                  },
+
+
                   child: const Text(
                     "탈퇴하기",
                     style: TextStyle(color: Colors.grey, fontSize: 16),

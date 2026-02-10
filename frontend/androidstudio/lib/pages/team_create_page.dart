@@ -12,7 +12,8 @@ class TeamCreatePage extends StatefulWidget {
 
 class _TeamCreatePageState extends State<TeamCreatePage> {
   final TextEditingController teamNameController = TextEditingController();
-  final TextEditingController fanIdController = TextEditingController(); // UI만 존재
+  final TextEditingController fanIdController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -52,14 +53,14 @@ class _TeamCreatePageState extends State<TeamCreatePage> {
             TextField(
               controller: fanIdController,
               decoration: const InputDecoration(
-                labelText: "선풍기 ID (서버에는 전송되지 않습니다)",
+                labelText: "선풍기 ID",
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 32),
 
             TextField(
-              controller: fanIdController,
+              controller: passwordController,
               decoration: const InputDecoration(
                 labelText: "비밀번호 설정",
                 border: OutlineInputBorder(),
@@ -69,11 +70,15 @@ class _TeamCreatePageState extends State<TeamCreatePage> {
 
             ElevatedButton(
               onPressed: () async {
-                // 🔥 실제로 서버에는 fanId는 보내지 않음
+
                 final res = await ApiService.createTeam(
-                  teamNameController.text.trim(),
-                  widget.userId,
+                  teamName: teamNameController.text.trim(),
+                  teamPassword: passwordController.text.trim(),
+                  userId: widget.userId,
+                  deviceId: fanIdController.text.trim(),
                 );
+
+
 
                 if (res != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
