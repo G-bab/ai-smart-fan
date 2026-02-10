@@ -5,11 +5,18 @@ from django.db import models
 # 팀 (Team)
 # ---------------------------
 class Team(models.Model):
-    team_id = models.AutoField(primary_key=True)  # Key
-    team_name = models.CharField(max_length=100, null=True, blank=True)  # Field
+    team_id = models.AutoField(primary_key=True)
+    team_name = models.CharField(
+        max_length=100,
+        default="default_team"
+    )
+    team_password = models.CharField(
+        max_length=4,
+        default="0000"
+    )
 
     def __str__(self):
-        return self.team_name or f"Team {self.team_id}"
+        return self.team_name
 
 
 # ---------------------------
@@ -77,16 +84,16 @@ class FilterStatus(models.Model):
 # 팀 사용자 연결 (TeamUser)
 # ---------------------------
 class TeamUser(models.Model):
-    team_user_id = models.AutoField(primary_key=True)  # Key
-    user = models.ForeignKey(User, on_delete=models.CASCADE)  # Key2 (FK)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)  # Key3 (FK)
+    team_user_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
 
     ROLE_CHOICES = [
         ('admin', 'Admin'),
         ('sub_admin', 'Sub Admin'),
         ('user', 'User'),
     ]
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, null=True, blank=True)  # Field (ENUM)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
 
     def __str__(self):
         return f"{self.user.user_id} in {self.team.team_name} ({self.role})"
