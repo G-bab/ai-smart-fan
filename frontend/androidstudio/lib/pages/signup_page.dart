@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
-class SignupPage extends StatelessWidget {
+class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
 
   @override
+  State<SignupPage> createState() => _SignupPageState();
+}
+
+class _SignupPageState extends State<SignupPage> {
+
+  // 컨트롤러들
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController passwordConfirmController = TextEditingController();
+  final TextEditingController birthController = TextEditingController();
+
+
+  @override
   Widget build(BuildContext context) {
-    // 컨트롤러 추가
-    final TextEditingController emailController = TextEditingController();
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController passwordController = TextEditingController();
-    final TextEditingController passwordConfirmController = TextEditingController();
-    final TextEditingController birthController = TextEditingController();
 
 
     return Scaffold(
@@ -98,34 +106,57 @@ class SignupPage extends StatelessWidget {
             // 🔹 가입하기 버튼
             ElevatedButton(
               onPressed: () async {
-                // ✅ 생년월일 선택 여부 체크 (추가)
-                if (birthController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("생년월일을 선택해주세요")),
-                  );
+                final email = emailController.text.trim();
+                final name = nameController.text.trim();
+                final birth = birthController.text.trim();
+                final pw = passwordController.text.trim();
+                final pwConfirm = passwordConfirmController.text.trim();
+
+                if (email.isEmpty) {
+                  _showSnack(context, "아이디를 입력해주세요");
                   return;
                 }
 
-                // 비밀번호 확인 체크
-                if (passwordController.text != passwordConfirmController.text) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("비밀번호가 일치하지 않습니다.")),
-                  );
+                final idRegex = RegExp(r'^[a-zA-Z0-9]+$');
+                if (!idRegex.hasMatch(email)) {
+                  _showSnack(context, "아이디는 영문과 숫자만 가능합니다");
+                  return;
+                }
+
+
+                if (name.isEmpty) {
+                  _showSnack(context, "이름을 입력해주세요");
+                  return;
+                }
+
+                if (birth.isEmpty) {
+                  _showSnack(context, "생년월일을 선택해주세요");
+                  return;
+                }
+
+                if (pw.isEmpty) {
+                  _showSnack(context, "비밀번호를 입력해주세요");
+                  return;
+                }
+
+                if (pwConfirm.isEmpty) {
+                  _showSnack(context, "비밀번호 확인을 입력해주세요");
+                  return;
+                }
+
+                if (pw != pwConfirm) {
+                  _showSnack(context, "비밀번호가 일치하지 않습니다");
                   return;
                 }
 
                 final result = await ApiService.register(
-                  emailController.text.trim(),
-                  passwordController.text.trim(),
-                  nameController.text.trim(),
-                  birthController.text.trim(),
+                  email,
+                  pw,
+                  name,
+                  birth,
                 );
 
-
-
                 if (result != null && result['user_id'] != null) {
-                  final String userId = result['user_id']; // 👈 여기서 userId 정의
-
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("회원가입 성공")),
                   );
@@ -133,14 +164,14 @@ class SignupPage extends StatelessWidget {
                   Navigator.pushReplacementNamed(
                     context,
                     '/team',
-                    arguments: userId,
+                    arguments: result['user_id'],
                   );
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("회원가입 실패")),
-                  );
+                  _showSnack(context, "회원가입 실패");
                 }
               },
+
+
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 56),
                 backgroundColor: Colors.blue,
@@ -155,4 +186,11 @@ class SignupPage extends StatelessWidget {
       ),
     );
   }
+
+  void _showSnack(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
+
 }

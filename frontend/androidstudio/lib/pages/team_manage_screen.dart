@@ -5,6 +5,7 @@ class TeamManagerPage extends StatefulWidget {
   const TeamManagerPage({super.key});
 
   @override
+
   State<TeamManagerPage> createState() => _TeamManagerPageState();
 }
 

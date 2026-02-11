@@ -1,11 +1,16 @@
 class UserSession {
-  static String userId = "";      // 로그인 아이디
-  static String name = "";        // 사용자 이름
-  static int selectedTeamId = 1;
+  static String userId = "";
+  static String name = "";
+
+  static int? selectedTeamId;
+  static String? selectedTeamName;
+  static String? selectedDeviceId;
 
   static void clear() {
     userId = "";
     name = "";
-    selectedTeamId = 1;
+    selectedTeamId = null;
+    selectedTeamName = null;
+    selectedDeviceId = null;
   }
 }
